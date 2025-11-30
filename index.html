@@ -320,6 +320,7 @@
     <script>
         let recognition;
         let isRecording = false;
+        let currentTranscript = ''; // Track current recording session
 
         // Initialize speech recognition
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -329,18 +330,17 @@
             recognition.interimResults = true;
             recognition.lang = 'en-US';
 
-            let finalTranscript = '';
-            let interimTranscript = '';
-
             recognition.onstart = () => {
                 isRecording = true;
+                currentTranscript = ''; // Reset for new recording
                 document.getElementById('voiceBtn').classList.add('recording');
-                document.getElementById('voiceBtnText').textContent = 'Recording...';
-                showStatus('Listening... Speak now!', 'info');
+                document.getElementById('voiceBtnText').textContent = 'Stop Recording';
+                showStatus('🎤 Listening... Speak now! Click "Stop Recording" when finished.', 'info');
             };
 
             recognition.onresult = (event) => {
-                interimTranscript = '';
+                let interimTranscript = '';
+                let finalTranscript = '';
                 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
@@ -351,20 +351,30 @@
                     }
                 }
 
-                const currentText = document.getElementById('inputText').value;
-                const baseText = currentText.replace(interimTranscript, '').trim();
-                document.getElementById('inputText').value = baseText + (baseText ? ' ' : '') + finalTranscript + interimTranscript;
+                // Add to current transcript
+                currentTranscript += finalTranscript;
+                
+                // Show the full current transcript plus interim
+                const textArea = document.getElementById('inputText');
+                textArea.value = currentTranscript + interimTranscript;
             };
 
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
                 stopRecording();
-                showStatus('Error: ' + event.error, 'error');
+                if (event.error !== 'no-speech') {
+                    showStatus('Error: ' + event.error, 'error');
+                }
             };
 
             recognition.onend = () => {
                 if (isRecording) {
-                    stopRecording();
+                    // Only auto-restart if we haven't clicked stop
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        stopRecording();
+                    }
                 }
             };
         }
@@ -376,9 +386,10 @@
             }
 
             if (isRecording) {
+                // Stop recording
                 stopRecording();
             } else {
-                // Request microphone permission first
+                // Start recording - request microphone permission first
                 try {
                     showStatus('Requesting microphone permission...', 'info');
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -408,11 +419,16 @@
 
         function stopRecording() {
             if (recognition && isRecording) {
+                isRecording = false; // Set this FIRST to prevent auto-restart
                 recognition.stop();
-                isRecording = false;
                 document.getElementById('voiceBtn').classList.remove('recording');
                 document.getElementById('voiceBtnText').textContent = 'Start Recording';
-                showStatus('Recording stopped', 'success');
+                
+                // Keep the transcribed text in the textarea
+                const textArea = document.getElementById('inputText');
+                textArea.value = currentTranscript.trim();
+                
+                showStatus('✓ Recording stopped. You can edit the text or click "Start Recording" to add more.', 'success');
             }
         }
 
@@ -594,13 +610,12 @@ Make it professional, clear, and comprehensive. Use proper formatting with clear
         });
 
         document.getElementById('clearBtn').addEventListener('click', () => {
-            document.getElementById('customerName').value = '';
-            document.getElementById('propertyAddress').value = '';
-            document.getElementById('phoneNumber').value = '';
+            // Only clear the project details textarea, not customer info
             document.getElementById('inputText').value = '';
             document.getElementById('proposalOutput').textContent = 'Your formatted proposal will appear here...';
             document.getElementById('copyBtn').style.display = 'none';
             document.getElementById('pdfBtn').style.display = 'none';
+            currentTranscript = ''; // Reset transcript
             clearStatus();
         });
 
